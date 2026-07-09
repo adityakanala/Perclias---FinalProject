@@ -1,0 +1,94 @@
+Problem
+What Perclias solves
+Doctors lose time manually capturing patient conversation data. Perclias acts as an AI clinical assistant — recording, transcribing, analyzing, and surfacing relevant medical knowledge so doctors can focus on diagnosis rather than note-taking.
+
+Data layer
+Medication knowledge base
+BeautifulSoup + Selenium scraped MedlinePlus for drug/medication data. Pydantic validated the schema. Apache Airflow DAGs orchestrated the pipeline. Data landed in Snowflake for structured SQL queries, and embeddings went to Pinecone for semantic vector search.
+
+AI layer
+Conversation intelligence
+Doctor-patient audio is captured, uploaded to AWS S3, then transcribed via OpenAI Whisper. The transcript is processed with LangChain + GPT to extract symptoms, summarize findings, and generate recommendations — grounded in the Pinecone knowledge base (RAG).
+
+Vision layer
+Medical image analysis
+Google Gemini Vision Pro analyzes uploaded medical images (X-rays, scans, etc.) and returns structured clinical observations — helping doctors get AI-assisted second opinions on visual diagnostics.
+
+Interface + auth
+Doctor-facing app
+Streamlit powers the UI — login, patient management, audio recording, image upload, and chat. Firebase handles authentication. The app was deployed on Google Cloud Platform (GCE VM).
+
+
+My Contribution
+"I owned three things. First, the entire OpenAI integration — setting up the Whisper transcription pipeline where audio gets uploaded to S3 and converted to text, and building the LangChain RAG chain that connects the transcript to GPT-4 with Pinecone context injected in between. Second, the Pinecone vector database — I handled chunking the medication data into manageable pieces, generating the embeddings using OpenAI's embedding model, and upserting them into the Pinecone index. Third, the deployment — I containerized the Streamlit app with Docker and deployed it on a GCP virtual machine so the team had a live accessible URL to demo. My teammates handled the web scraping pipeline and Snowflake on their end."
+
+Open AI
+
+Whisper - Audio transcription pipeline
+1. Doctor records consultation audio in the Streamlit UI. The audio file (mp3/wav) is uploaded directly to an AWS S3 bucket you configured.
+2. S3 pre-signed URL is generated so the file can be securely passed to the OpenAI API without exposing your bucket publicly.
+3. OpenAI Whisper API (whisper-1 model) receives the audio and returns a full text transcript. Whisper handles accents, medical terminology, and mixed-language speech better than most ASR systems.
+4. Transcript is passed downstream to the LangChain RAG chain for clinical analysis.
+response = openai.Audio.transcribe(
+  model="whisper-1",
+  file=audio_file
+)
+transcript = response["text"]
+
+LangChain + GPT-4 - RAG chain for clinical reasoning
+1. Transcript embedding — the incoming transcript is embedded using OpenAI's text-embedding-ada-002 model to generate a query vector.
+2. Pinecone retrieval — the query vector is used to fetch the top-k most similar medication/symptom records from Pinecone (semantic search). These become the "context."
+3. Prompt construction via LangChain — a RetrievalQA chain is built that injects the retrieved context alongside the transcript into a structured system prompt for GPT-4.
+4. GPT-4 generates output — a structured clinical summary: symptoms identified, possible diagnoses, and medication/treatment recommendations grounded in the retrieved data.
+
+chain = RetrievalQA.from_chain_type(
+  llm=ChatOpenAI(model="gpt-4"),
+  retriever=vectorstore.as_retriever(k=5),
+  chain_type="stuff"
+)
+result = chain.run(transcript)
+
+PineCone
+
+Embeddings - What you built and why it matters
+Pinecone stores high-dimensional vector representations of medication text so GPT-4 can retrieve relevant knowledge at inference time — instead of being limited to what it learned during training. You owned this entire embedding pipeline.
+Step by step - How you built the index
+1. Raw medication data came from Snowflake — structured records scraped from MedlinePlus by your teammate Shubh (drug names, indications, side effects, dosages).
+2. Chunking — long text fields were split into smaller chunks (~300–500 tokens) so embeddings are semantically focused. You used LangChain's RecursiveCharacterTextSplitter for this.
+3. Embedding generation — each chunk was passed through OpenAI's text-embedding-ada-002 model to produce a 1536-dimensional float vector.
+4. Upsert to Pinecone — vectors were upserted in batches with metadata (drug name, source URL) so retrieved results are traceable back to their source.
+5. At query time — a patient transcript vector queries the index using cosine similarity. Top-k results (k=5) are returned and injected into the GPT-4 prompt as context.
+
+GCP Deployment
+
+Docker - Containerizing the Streamlit app
+You wrote a Dockerfile that packages the Streamlit app, its Python dependencies, and environment config into a portable container. This ensures the app runs identically on your local machine and on GCP.
+FROM python:3.10-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+EXPOSE 8501
+CMD ["streamlit", "run", "main.py", "--server.port=8501"]
+
+GCP - Deployment on Google Compute Engine
+1. GCE VM provisioned — you spun up a Linux VM on Google Compute Engine (e2-medium or similar), which gives a persistent public IP address.
+2. Docker installed on VM — SSH'd in, installed Docker, pulled the image or built it directly on the instance.
+3. Firewall rule added — opened port 8501 in GCP's VPC firewall so the app is reachable at the public IP.
+4. App runs at static IP — the live URL was http://35.227.43.169:8501/. Docker was run with --restart=always so it auto-recovers if the container crashes.
+5. Secrets managed — API keys (OpenAI, Pinecone, Firebase) were injected as environment variables via docker run -e flags or a .env file, never hardcoded in source.
+
+docker-compose - Multi-service orchestration
+The repo has a docker-compose.yml — this lets you define the Streamlit service, environment variables, and port mappings in one file and start everything with docker-compose up. Interviewers love that you understand the difference between a single-container Dockerfile and multi-service orchestration via compose.
+
+AI Models
+
+OpenAI is the company that provides AI models as a service via API. Think of it as the vendor.
+GPT-4 is a specific model made by OpenAI — it's the large language model that actually reads text and generates intelligent responses. In Perclias, GPT-4 is the brain that reads the patient transcript + retrieved medication context and writes the clinical summary.
+Whisper is also an OpenAI model, but a completely different one — it's specialized for audio-to-text transcription, not text generation. So OpenAI gives you two models here: Whisper for ears, GPT-4 for reasoning.
+LangChain is not an AI model at all. It's an open-source Python framework that helps you orchestrate and connect AI models into pipelines. It doesn't think or generate anything on its own — it's the plumbing.
+
+In Perclias specifically, the division of labor is:
+Whisper → converts doctor-patient audio into text
+LangChain → takes that text, queries Pinecone for relevant medication context, assembles the prompt with that context, and calls GPT-4
+GPT-4 → reads the assembled prompt and generates the clinical summary
