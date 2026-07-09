@@ -51,7 +51,7 @@ result = chain.run(transcript)
 PineCone
 
 Embeddings - What you built and why it matters
-Pinecone stores high-dimensional vector representations of medication text so GPT-4 can retrieve relevant knowledge at inference time — instead of being limited to what it learned during training. You owned this entire embedding pipeline.
+Pinecone stores high-dimensional vector representations of medication text so GPT-4 can retrieve relevant knowledge at inference time — instead of being limited to what it learned during training. I owned this entire embedding pipeline.
 Step by step - How you built the index
 1. Raw medication data came from Snowflake — structured records scraped from MedlinePlus by your teammate Shubh (drug names, indications, side effects, dosages).
 2. Chunking — long text fields were split into smaller chunks (~300–500 tokens) so embeddings are semantically focused. You used LangChain's RecursiveCharacterTextSplitter for this.
@@ -62,7 +62,7 @@ Step by step - How you built the index
 GCP Deployment
 
 Docker - Containerizing the Streamlit app
-You wrote a Dockerfile that packages the Streamlit app, its Python dependencies, and environment config into a portable container. This ensures the app runs identically on your local machine and on GCP.
+I wrote a Dockerfile that packages the Streamlit app, its Python dependencies, and environment config into a portable container. This ensures the app runs identically on your local machine and on GCP.
 FROM python:3.10-slim
 WORKDIR /app
 COPY requirements.txt .
@@ -79,8 +79,7 @@ GCP - Deployment on Google Compute Engine
 5. Secrets managed — API keys (OpenAI, Pinecone, Firebase) were injected as environment variables via docker run -e flags or a .env file, never hardcoded in source.
 
 docker-compose - Multi-service orchestration
-The repo has a docker-compose.yml — this lets you define the Streamlit service, environment variables, and port mappings in one file and start everything with docker-compose up. Interviewers love that you understand the difference between a single-container Dockerfile and multi-service orchestration via compose.
-
+The repo has a docker-compose.yml — this lets me define the Streamlit service, environment variables, and port mappings in one file and start everything with docker-compose up.
 AI Models
 
 OpenAI is the company that provides AI models as a service via API. Think of it as the vendor.
